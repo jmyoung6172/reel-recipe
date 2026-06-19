@@ -4,10 +4,10 @@ import subprocess
 import tempfile
 import json
 import glob
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 import anthropic
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
@@ -18,19 +18,29 @@ def download_reel(url: str, output_dir: str) -> str:
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed: {result.stderr}")
+        raise RuntimeError(f"Download failed: {result.stderr}")
     return output_path
 
 
 def extract_frames(video_path: str, output_dir: str) -> list:
+    import imageio
     frames_dir = os.path.join(output_dir, "frames")
     os.makedirs(frames_dir, exist_ok=True)
-    subprocess.run(
-        ["ffmpeg", "-i", video_path, "-vf", "fps=0.3", "-vframes", "12", "-q:v", "3",
-         os.path.join(frames_dir, "frame%03d.jpg")],
-        capture_output=True, check=True, timeout=30,
-    )
-    return sorted(glob.glob(os.path.join(frames_dir, "*.jpg")))
+    paths = []
+    try:
+        reader = imageio.get_reader(video_path)
+        meta = reader.get_meta_data()
+        fps = meta.get("fps", 30)
+        interval = int(fps * 3)  # one frame every 3 seconds
+        for i, frame in enumerate(reader):
+            if i % interval == 0 and len(paths) < 10:
+                path = os.path.join(frames_dir, f"frame{i:04d}.jpg")
+                imageio.imwrite(path, frame)
+                paths.append(path)
+        reader.close()
+    except Exception as e:
+        raise RuntimeError(f"Frame extraction failed: {str(e)}")
+    return paths
 
 
 def encode_image(path: str) -> str:
