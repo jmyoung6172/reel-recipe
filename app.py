@@ -115,8 +115,16 @@ def extract_photo():
     if not image_data:
         return jsonify({"error": "No image provided"}), 400
     try:
+        mime_type = (data or {}).get("mimeType", "image/jpeg")
+        if mime_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+            mime_type = "image/jpeg"
         if "," in image_data:
             image_data = image_data.split(",")[1]
+        # Auto-detect from base64 signature
+        if image_data.startswith("iVBOR"):
+            mime_type = "image/png"
+        elif image_data.startswith("/9j/"):
+            mime_type = "image/jpeg"
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
@@ -127,7 +135,7 @@ def extract_photo():
                         "type": "image",
                         "source": {
                             "type": "base64",
-                            "media_type": "image/jpeg",
+                            "media_type": mime_type,
                             "data": image_data,
                         },
                     },
