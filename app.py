@@ -72,10 +72,17 @@ def analyze_frames(frame_paths: list) -> dict:
         messages=[{"role": "user", "content": image_content}],
     )
     raw = response.content[0].text.strip()
-    if raw.startswith("```"):
+    # Strip markdown fences
+    if "```" in raw:
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
+    # Find JSON object within response
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        raise json.JSONDecodeError("No JSON found", raw, 0)
+    raw = raw[start:end]
     return json.loads(raw.strip())
 
 
