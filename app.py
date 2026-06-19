@@ -14,7 +14,7 @@ client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 def download_reel(url: str, output_dir: str) -> str:
     output_path = os.path.join(output_dir, "reel.mp4")
     result = subprocess.run(
-        ["yt-dlp", "--no-warnings", "-o", output_path, url],
+        ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_path, url],
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
