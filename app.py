@@ -108,6 +108,61 @@ def extract():
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 
+@app.route("/api/extract-photo", methods=["POST"])
+def extract_photo():
+    data = request.get_json()
+    image_data = (data or {}).get("image", "").strip()
+    if not image_data:
+        return jsonify({"error": "No image provided"}), 400
+    try:
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image_data,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "This is a photo of a recipe (handwritten, printed, or from a cookbook). "
+                            "Extract the recipe and return ONLY valid JSON:\n"
+                            '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
+                            '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
+                            '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
+                            '"steps":["Step 1..."],"tips":["Optional tip"]}'
+                            "\nNo text outside the JSON."
+                        ),
+                    },
+                ],
+            }],
+        )
+        raw = response.content[0].text.strip()
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start == -1 or end == 0:
+            raise json.JSONDecodeError("No JSON found", raw, 0)
+        raw = raw[start:end]
+        return jsonify({"recipe": json.loads(raw.strip())})
+    except json.JSONDecodeError:
+        return jsonify({"error": "Could not read recipe — try a clearer photo"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
