@@ -99,7 +99,8 @@ def extract():
             if not frame_paths:
                 return jsonify({"error": "Could not extract frames"}), 500
             recipe = analyze_frames(frame_paths)
-            return jsonify({"recipe": recipe})
+            thumbnail = encode_image(frame_paths[0]) if frame_paths else None
+            return jsonify({"recipe": recipe, "thumbnail": thumbnail})
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 422
     except json.JSONDecodeError:
