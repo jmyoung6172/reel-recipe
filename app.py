@@ -112,38 +112,46 @@ def extract():
 @app.route("/api/extract-photo", methods=["POST"])
 def extract_photo():
     data = request.get_json()
-    image_data = (data or {}).get("image", "").strip()
-    if not image_data:
+    images = (data or {}).get("images", [])
+    # Support both single image (legacy) and multiple images
+    if not images:
+        single = (data or {}).get("image", "").strip()
+        single_mime = (data or {}).get("mimeType", "image/jpeg")
+        if single:
+            images = [{"data": single, "mimeType": single_mime}]
+    if not images:
         return jsonify({"error": "No image provided"}), 400
     try:
-        mime_type = (data or {}).get("mimeType", "image/jpeg")
-        if mime_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
-            mime_type = "image/jpeg"
-        if "," in image_data:
-            image_data = image_data.split(",")[1]
-        # Auto-detect from base64 signature
-        if image_data.startswith("iVBOR"):
-            mime_type = "image/png"
-        elif image_data.startswith("/9j/"):
-            mime_type = "image/jpeg"
+        image_content = []
+        for img in images:
+            img_data = img.get("data", "")
+            mime_type = img.get("mimeType", "image/jpeg")
+            if mime_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+                mime_type = "image/jpeg"
+            if "," in img_data:
+                img_data = img_data.split(",")[1]
+            if img_data.startswith("iVBOR"):
+                mime_type = "image/png"
+            elif img_data.startswith("/9j/"):
+                mime_type = "image/jpeg"
+            image_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": img_data,
+                },
+            })
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
             messages=[{
                 "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": mime_type,
-                            "data": image_data,
-                        },
-                    },
+                "content": image_content + [
                     {
                         "type": "text",
                         "text": (
-                            "This is a photo of a recipe (handwritten, printed, or from a cookbook). "
+                            "These are photos of a recipe (handwritten, printed, or from a cookbook). There may be multiple pages. "
                             "Extract the recipe and return ONLY valid JSON:\n"
                             '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
                             '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
@@ -152,8 +160,7 @@ def extract_photo():
                             "\nNo text outside the JSON."
                         ),
                     },
-                ],
-            }],
+                }],
         )
         raw = response.content[0].text.strip()
         if "```" in raw:
