@@ -31,7 +31,7 @@ def extract_frames(video_path: str, output_dir: str) -> list:
         reader = imageio.get_reader(video_path)
         meta = reader.get_meta_data()
         fps = meta.get("fps", 30)
-        interval = int(fps * 3)  # one frame every 3 seconds
+        interval = int(fps * 3)
         for i, frame in enumerate(reader):
             if i % interval == 0 and len(paths) < 10:
                 path = os.path.join(frames_dir, f"frame{i:04d}.jpg")
@@ -72,18 +72,28 @@ def analyze_frames(frame_paths: list) -> dict:
         messages=[{"role": "user", "content": image_content}],
     )
     raw = response.content[0].text.strip()
-    # Strip markdown fences
     if "```" in raw:
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
-    # Find JSON object within response
     start = raw.find("{")
     end = raw.rfind("}") + 1
     if start == -1 or end == 0:
         raise json.JSONDecodeError("No JSON found", raw, 0)
     raw = raw[start:end]
     return json.loads(raw.strip())
+
+
+def process_image_data(img_data: str, mime_type: str = "image/jpeg") -> dict:
+    if mime_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
+        mime_type = "image/jpeg"
+    if "," in img_data:
+        img_data = img_data.split(",")[1]
+    if img_data.startswith("iVBOR"):
+        mime_type = "image/png"
+    elif img_data.startswith("/9j/"):
+        mime_type = "image/jpeg"
+    return {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": img_data}}
 
 
 @app.route("/api/extract", methods=["POST"])
@@ -112,8 +122,8 @@ def extract():
 @app.route("/api/extract-photo", methods=["POST"])
 def extract_photo():
     data = request.get_json()
+    # Support multiple images
     images = (data or {}).get("images", [])
-    # Support both single image (legacy) and multiple images
     if not images:
         single = (data or {}).get("image", "").strip()
         single_mime = (data or {}).get("mimeType", "image/jpeg")
@@ -126,41 +136,26 @@ def extract_photo():
         for img in images:
             img_data = img.get("data", "")
             mime_type = img.get("mimeType", "image/jpeg")
-            if mime_type not in ["image/jpeg", "image/png", "image/webp", "image/gif"]:
-                mime_type = "image/jpeg"
-            if "," in img_data:
-                img_data = img_data.split(",")[1]
-            if img_data.startswith("iVBOR"):
-                mime_type = "image/png"
-            elif img_data.startswith("/9j/"):
-                mime_type = "image/jpeg"
-            image_content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": mime_type,
-                    "data": img_data,
-                },
-            })
+            image_content.append(process_image_data(img_data, mime_type))
+
+        image_content.append({
+            "type": "text",
+            "text": (
+                "These are photos of a recipe (possibly multiple pages from a cookbook, "
+                "handwritten card, or printed recipe). Extract the complete recipe and "
+                "return ONLY valid JSON:\n"
+                '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
+                '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
+                '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
+                '"steps":["Step 1..."],"tips":["Optional tip"]}'
+                "\nNo text outside the JSON."
+            ),
+        })
+
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
-            messages=[{
-                "role": "user",
-                "content": image_content + [
-                    {
-                        "type": "text",
-                        "text": (
-                            "These are photos of a recipe (handwritten, printed, or from a cookbook). There may be multiple pages. "
-                            "Extract the recipe and return ONLY valid JSON:\n"
-                            '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
-                            '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
-                            '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
-                            '"steps":["Step 1..."],"tips":["Optional tip"]}'
-                            "\nNo text outside the JSON."
-                        ),
-                    },
-                }],
+            messages=[{"role": "user", "content": image_content}],
         )
         raw = response.content[0].text.strip()
         if "```" in raw:
