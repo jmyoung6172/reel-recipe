@@ -48,6 +48,24 @@ def encode_image(path: str) -> str:
         return base64.standard_b64encode(f.read()).decode("utf-8")
 
 
+def parse_recipe_json(raw: str) -> dict:
+    raw = raw.strip()
+    if "```" in raw:
+        parts = raw.split("```")
+        for part in parts:
+            if part.startswith("json"):
+                part = part[4:]
+            part = part.strip()
+            if part.startswith("{"):
+                raw = part
+                break
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        raise json.JSONDecodeError("No JSON found", raw, 0)
+    return json.loads(raw[start:end].strip())
+
+
 def analyze_frames(frame_paths: list) -> dict:
     image_content = []
     for path in frame_paths:
@@ -67,22 +85,19 @@ def analyze_frames(frame_paths: list) -> dict:
             "\nNutrition should be estimated per serving. No text outside the JSON."
         ),
     })
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        messages=[{"role": "user", "content": image_content}],
-    )
-    raw = response.content[0].text.strip()
-    if "```" in raw:
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    start = raw.find("{")
-    end = raw.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise json.JSONDecodeError("No JSON found", raw, 0)
-    raw = raw[start:end]
-    return json.loads(raw.strip())
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                messages=[{"role": "user", "content": image_content}],
+            )
+            return parse_recipe_json(response.content[0].text)
+        except Exception as e:
+            last_error = e
+            continue
+    raise json.JSONDecodeError(f"Failed after 3 attempts: {str(last_error)}", "", 0)
 
 
 def process_image_data(img_data: str, mime_type: str = "image/jpeg") -> dict:
@@ -159,17 +174,7 @@ def extract_photo():
             max_tokens=1500,
             messages=[{"role": "user", "content": image_content}],
         )
-        raw = response.content[0].text.strip()
-        if "```" in raw:
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        if start == -1 or end == 0:
-            raise json.JSONDecodeError("No JSON found", raw, 0)
-        raw = raw[start:end]
-        return jsonify({"recipe": json.loads(raw.strip())})
+        return jsonify({"recipe": parse_recipe_json(response.content[0].text)})
     except json.JSONDecodeError:
         return jsonify({"error": "Could not read recipe — try a clearer photo"}), 500
     except Exception as e:
