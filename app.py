@@ -62,8 +62,9 @@ def analyze_frames(frame_paths: list) -> dict:
             '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
             '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
             '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
-            '"steps":["Step 1..."],"tips":["Optional tip"]}'
-            "\nNo text outside the JSON."
+            '"steps":["Step 1..."],"tips":["Optional tip"],'
+            '"nutrition":{"calories":350,"protein":25,"carbs":30,"fat":12}}'
+            "\nNutrition should be estimated per serving. No text outside the JSON."
         ),
     })
     response = client.messages.create(
@@ -147,8 +148,9 @@ def extract_photo():
                 '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
                 '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
                 '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
-                '"steps":["Step 1..."],"tips":["Optional tip"]}'
-                "\nNo text outside the JSON."
+                '"steps":["Step 1..."],"tips":["Optional tip"],'
+                '"nutrition":{"calories":350,"protein":25,"carbs":30,"fat":12}}'
+                "\nNutrition should be estimated per serving. No text outside the JSON."
             ),
         })
 
