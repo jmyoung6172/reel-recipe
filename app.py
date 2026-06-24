@@ -138,7 +138,6 @@ def extract():
 @app.route("/api/extract-photo", methods=["POST"])
 def extract_photo():
     data = request.get_json()
-    # Support multiple images
     images = (data or {}).get("images", [])
     if not images:
         single = (data or {}).get("image", "").strip()
@@ -172,6 +171,7 @@ def extract_photo():
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
+            timeout=60.0,
             messages=[{"role": "user", "content": image_content}],
         )
         return jsonify({"recipe": parse_recipe_json(response.content[0].text)})
@@ -179,6 +179,107 @@ def extract_photo():
         return jsonify({"error": "Could not read recipe — try a clearer photo"}), 500
     except Exception as e:
         return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+
+@app.route("/api/suggest-snacks", methods=["POST"])
+def suggest_snacks():
+    data = request.get_json()
+    remaining = (data or {}).get("remaining", {})
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=800,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"I have these remaining macros for today:\n"
+                f"- Calories: {remaining.get('calories')} kcal\n"
+                f"- Protein: {remaining.get('protein')}g\n"
+                f"- Carbs: {remaining.get('carbs')}g\n"
+                f"- Fat: {remaining.get('fat')}g\n\n"
+                "Suggest 4 specific snacks that would fit well within these remaining macros. "
+                "For each snack include the name, approximate portion size, and estimated macros. "
+                "Keep it practical and realistic. Format each snack clearly with an emoji."
+            )
+        }]
+    )
+    return jsonify({"text": message.content[0].text})
+
+
+@app.route("/api/search-food", methods=["POST"])
+def search_food():
+    data = request.get_json()
+    query = (data or {}).get("query", "")
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=800,
+        messages=[{
+            "role": "user",
+            "content": (
+                f'Give me nutrition info for: "{query}"\n\n'
+                "Return ONLY a JSON array of 1-3 serving size options:\n"
+                '[{"name":"Chipotle Chicken Burrito Bowl","serving":"1 bowl (680g)","calories":665,"protein":51,"carbs":60,"fat":23}]\n\n'
+                "Be as accurate as possible using known restaurant/food data. No text outside the JSON array."
+            )
+        }]
+    )
+    return jsonify({"text": message.content[0].text})
+
+
+@app.route("/api/generate-recipe", methods=["POST"])
+def generate_recipe():
+    data = request.get_json()
+    idea = (data or {}).get("idea", "")
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1500,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Create a detailed recipe for: {idea}\n\n"
+                "Return ONLY valid JSON:\n"
+                '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins","cook_time":"e.g. 20 mins","servings":"e.g. 2",'
+                '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
+                '"steps":["Step 1..."],"tips":["Optional tip"],'
+                '"nutrition":{"calories":350,"protein":25,"carbs":30,"fat":12}}\n\n'
+                "Nutrition should be estimated per serving. No text outside the JSON."
+            )
+        }]
+    )
+    return jsonify({"text": message.content[0].text})
+
+
+@app.route("/api/discover-recipes", methods=["POST"])
+def discover_recipes():
+    data = request.get_json()
+    filter_type = (data or {}).get("filter", None)
+    filter_text = f"Focus on {filter_type} recipes." if filter_type else "Mix of different cuisines and meal types."
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4000,
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Generate 6 inspiring recipe ideas. {filter_text}\n\n"
+                "Return ONLY a JSON array:\n"
+                '[{\n'
+                '  "dish": "Spicy Salmon Rice Bowl",\n'
+                '  "description": "Fresh salmon over jasmine rice with sriracha mayo",\n'
+                '  "prep_time": "10 mins",\n'
+                '  "cook_time": "15 mins",\n'
+                '  "servings": "2",\n'
+                '  "difficulty": "Easy",\n'
+                '  "cuisine": "Japanese",\n'
+                '  "emoji": "🍱",\n'
+                '  "ingredients": [{"amount":"2","unit":"fillets","item":"salmon"},{"amount":"1","unit":"cup","item":"jasmine rice"}],\n'
+                '  "steps": ["Cook rice according to package directions.", "Season salmon and pan sear 4 mins each side.", "Serve salmon over rice with sriracha mayo."],\n'
+                '  "tips": ["Use sushi-grade salmon for best results"],\n'
+                '  "nutrition": {"calories": 520, "protein": 38, "carbs": 45, "fat": 18}\n'
+                '}]\n\n'
+                "No text outside the JSON array."
+            )
+        }]
+    )
+    return jsonify({"text": message.content[0].text})
 
 
 if __name__ == "__main__":
