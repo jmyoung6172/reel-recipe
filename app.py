@@ -196,9 +196,10 @@ def suggest_snacks():
                 f"- Protein: {remaining.get('protein')}g\n"
                 f"- Carbs: {remaining.get('carbs')}g\n"
                 f"- Fat: {remaining.get('fat')}g\n\n"
-                "Suggest 4 specific snacks that would fit well within these remaining macros. "
-                "For each snack include the name, approximate portion size, and estimated macros. "
-                "Keep it practical and realistic. Format each snack clearly with an emoji."
+                "Suggest 4 specific snacks that fit within these remaining macros.\n\n"
+                "Return ONLY a JSON array, no text outside it:\n"
+                '[{"emoji":"🥜","name":"Greek Yogurt with Almonds","portion":"1 cup yogurt + 1oz almonds","calories":320,"protein":28,"carbs":18,"fat":14}]\n\n'
+                "Be practical and realistic. No text outside the JSON array."
             )
         }]
     )
