@@ -253,33 +253,37 @@ def discover_recipes():
     data = request.get_json()
     filter_type = (data or {}).get("filter", None)
     filter_text = f"Focus on {filter_type} recipes." if filter_type else "Mix of different cuisines and meal types."
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4000,
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Generate 6 inspiring recipe ideas. {filter_text}\n\n"
-                "Return ONLY a JSON array:\n"
-                '[{\n'
-                '  "dish": "Spicy Salmon Rice Bowl",\n'
-                '  "description": "Fresh salmon over jasmine rice with sriracha mayo",\n'
-                '  "prep_time": "10 mins",\n'
-                '  "cook_time": "15 mins",\n'
-                '  "servings": "2",\n'
-                '  "difficulty": "Easy",\n'
-                '  "cuisine": "Japanese",\n'
-                '  "emoji": "🍱",\n'
-                '  "ingredients": [{"amount":"2","unit":"fillets","item":"salmon"},{"amount":"1","unit":"cup","item":"jasmine rice"}],\n'
-                '  "steps": ["Cook rice according to package directions.", "Season salmon and pan sear 4 mins each side.", "Serve salmon over rice with sriracha mayo."],\n'
-                '  "tips": ["Use sushi-grade salmon for best results"],\n'
-                '  "nutrition": {"calories": 520, "protein": 38, "carbs": 45, "fat": 18}\n'
-                '}]\n\n'
-                "No text outside the JSON array."
-            )
-        }]
-    )
-    return jsonify({"text": message.content[0].text})
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            timeout=20.0,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Generate 4 inspiring recipe ideas. {filter_text}\n\n"
+                    "Return ONLY a JSON array:\n"
+                    '[{\n'
+                    '  "dish": "Spicy Salmon Rice Bowl",\n'
+                    '  "description": "Fresh salmon over jasmine rice with sriracha mayo",\n'
+                    '  "prep_time": "10 mins",\n'
+                    '  "cook_time": "15 mins",\n'
+                    '  "servings": "2",\n'
+                    '  "difficulty": "Easy",\n'
+                    '  "cuisine": "Japanese",\n'
+                    '  "emoji": "🍱",\n'
+                    '  "ingredients": [{"amount":"2","unit":"fillets","item":"salmon"},{"amount":"1","unit":"cup","item":"jasmine rice"}],\n'
+                    '  "steps": ["Cook rice according to package directions.", "Season salmon and pan sear 4 mins each side.", "Serve salmon over rice with sriracha mayo."],\n'
+                    '  "tips": ["Use sushi-grade salmon for best results"],\n'
+                    '  "nutrition": {"calories": 520, "protein": 38, "carbs": 45, "fat": 18}\n'
+                    '}]\n\n'
+                    "No text outside the JSON array."
+                )
+            }]
+        )
+        return jsonify({"text": message.content[0].text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
