@@ -4,3 +4,5 @@ gunicorn>=21.0
 yt-dlp>=2024.0
 imageio>=2.34.0
 imageio[ffmpeg]
+gevent>=24.0
+Pillow>=10.0
