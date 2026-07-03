@@ -295,6 +295,47 @@ def discover_recipes():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/pantry-recipe", methods=["POST"])
+def pantry_recipe():
+    data = request.get_json()
+    images = (data or {}).get("images", [])
+    if not images:
+        return jsonify({"error": "No image provided"}), 400
+    try:
+        image_content = []
+        for img in images:
+            img_data = img.get("data", "")
+            mime_type = img.get("mimeType", "image/jpeg")
+            image_content.append(process_image_data(img_data, mime_type))
+
+        image_content.append({
+            "type": "text",
+            "text": (
+                "Look at these photos of ingredients, food items, or pantry/fridge contents. "
+                "Identify all the ingredients you can see, then create one delicious recipe "
+                "using primarily those ingredients. Be creative but practical. "
+                "Return ONLY valid JSON:\n"
+                '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
+                '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
+                '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
+                '"steps":["Step 1..."],"tips":["Optional tip"],'
+                '"nutrition":{"calories":350,"protein":25,"carbs":30,"fat":12},'
+                '"detected_ingredients":["ingredient1","ingredient2"]}'
+                "\nNutrition should be estimated per serving. No text outside the JSON."
+            ),
+        })
+
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            timeout=60.0,
+            messages=[{"role": "user", "content": image_content}],
+        )
+        return jsonify({"recipe": parse_recipe_json(response.content[0].text)})
+    except json.JSONDecodeError:
+        return jsonify({"error": "Could not generate recipe — try a clearer photo"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
