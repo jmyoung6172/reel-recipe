@@ -41,7 +41,7 @@ def extract_frames(video_path: str, output_dir: str) -> list:
         fps = meta.get("fps", 30)
         interval = int(fps * 3)
         for i, frame in enumerate(reader):
-            if i % interval == 0 and len(paths) < 10:
+            if i % interval == 0 and len(paths) < 5:
                 path = os.path.join(frames_dir, f"frame{i:04d}.jpg")
                 imageio.imwrite(path, frame)
                 paths.append(path)
@@ -99,6 +99,7 @@ def analyze_frames(frame_paths: list) -> dict:
             response = client.messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=1500,
+                timeout=60.0,
                 messages=[{"role": "user", "content": image_content}],
             )
             return parse_recipe_json(response.content[0].text)
