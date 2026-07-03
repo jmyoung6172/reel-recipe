@@ -13,8 +13,13 @@ client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 def download_reel(url: str, output_dir: str) -> str:
     output_path = os.path.join(output_dir, "reel.mp4")
+    cmd = ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_path]
+    cookies_path = os.environ.get("COOKIES_PATH", "cookies.txt")
+    if os.path.exists(cookies_path):
+        cmd += ["--cookies", cookies_path]
+    cmd.append(url)
     result = subprocess.run(
-        ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_path, url],
+        cmd,
         capture_output=True, text=True, timeout=60,
     )
     if result.returncode != 0:
