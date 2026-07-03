@@ -41,7 +41,7 @@ def extract_frames(video_path: str, output_dir: str) -> list:
         fps = meta.get("fps", 30)
         interval = int(fps * 3)
         for i, frame in enumerate(reader):
-            if i % interval == 0 and len(paths) < 5:
+            if i % interval == 0 and len(paths) < 2:
                 path = os.path.join(frames_dir, f"frame{i:04d}.jpg")
                 imageio.imwrite(path, frame)
                 paths.append(path)
@@ -52,8 +52,13 @@ def extract_frames(video_path: str, output_dir: str) -> list:
 
 
 def encode_image(path: str) -> str:
-    with open(path, "rb") as f:
-        return base64.standard_b64encode(f.read()).decode("utf-8")
+    from PIL import Image
+    import io
+    img = Image.open(path)
+    img = img.resize((512, 288), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=60)
+    return base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
 
 def parse_recipe_json(raw: str) -> dict:
