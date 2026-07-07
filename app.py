@@ -11,9 +11,9 @@ app = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def download_reel(url: str, output_dir: str) -> str:
-    output_path = os.path.join(output_dir, "reel.mp4")
-    cmd = ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_path]
+def download_reel(url: str, output_dir: str) -> dict:
+    output_template = os.path.join(output_dir, "media_%(autonumber)s.%(ext)s")
+    cmd = ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_template]
     cookies_b64 = os.environ.get("COOKIES_B64", "")
     if cookies_b64:
         cookies_path = os.path.join(output_dir, "cookies.txt")
@@ -27,7 +27,27 @@ def download_reel(url: str, output_dir: str) -> str:
     )
     if result.returncode != 0:
         raise RuntimeError(f"Download failed: {result.stderr}")
-    return output_path
+
+    # Check what was downloaded — video or images
+    image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+    video_extensions = {'.mp4', '.mov', '.webm', '.mkv'}
+    
+    all_files = os.listdir(output_dir)
+    images = sorted([
+        os.path.join(output_dir, f) for f in all_files
+        if os.path.splitext(f)[1].lower() in image_extensions
+    ])
+    videos = sorted([
+        os.path.join(output_dir, f) for f in all_files
+        if os.path.splitext(f)[1].lower() in video_extensions
+    ])
+
+    if images:
+        return {"type": "images", "paths": images}
+    elif videos:
+        return {"type": "video", "path": videos[0]}
+    else:
+        raise RuntimeError("No media files downloaded")
 
 
 def extract_frames(video_path: str, output_dir: str) -> list:
@@ -84,7 +104,7 @@ def analyze_frames(frame_paths: list) -> dict:
     image_content.append({
         "type": "text",
         "text": (
-            "These are frames from a cooking video. Extract the recipe and return ONLY valid JSON:\n"
+            "These are frames from a cooking video or slides from a recipe carousel post. Extract the complete recipe and return ONLY valid JSON:\n"
             '{"dish":"name","description":"one sentence","prep_time":"e.g. 10 mins",'
             '"cook_time":"e.g. 20 mins","servings":"e.g. 2",'
             '"ingredients":[{"amount":"2","unit":"cups","item":"flour"}],'
@@ -129,10 +149,19 @@ def extract():
         return jsonify({"error": "No URL provided"}), 400
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            video_path = download_reel(url, tmpdir)
-            frame_paths = extract_frames(video_path, tmpdir)
-            if not frame_paths:
-                return jsonify({"error": "Could not extract frames"}), 500
+            media = download_reel(url, tmpdir)
+            
+            if media["type"] == "images":
+                # Carousel post — use images directly (max 5)
+                frame_paths = media["paths"][:5]
+                if not frame_paths:
+                    return jsonify({"error": "No images found in post"}), 500
+            else:
+                # Video post — extract frames as before
+                frame_paths = extract_frames(media["path"], tmpdir)
+                if not frame_paths:
+                    return jsonify({"error": "Could not extract frames"}), 500
+
             recipe = analyze_frames(frame_paths)
             thumbnail = encode_image(frame_paths[0]) if frame_paths else None
             return jsonify({"recipe": recipe, "thumbnail": thumbnail})
