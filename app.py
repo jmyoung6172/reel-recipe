@@ -42,12 +42,17 @@ def download_reel(url: str, output_dir: str) -> dict:
         if os.path.splitext(f)[1].lower() in video_extensions
     ])
 
+    import logging
+    logging.warning(f"Downloaded files: {all_files}")
+    
     if images:
+        logging.warning(f"Detected carousel with {len(images)} images")
         return {"type": "images", "paths": images}
     elif videos:
+        logging.warning(f"Detected video: {videos[0]}")
         return {"type": "video", "path": videos[0]}
     else:
-        raise RuntimeError("No media files downloaded")
+        raise RuntimeError(f"No media files downloaded. Files found: {all_files}")
 
 
 def extract_frames(video_path: str, output_dir: str) -> list:
