@@ -11,7 +11,42 @@ app = Flask(__name__)
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def resolve_url(url: str) -> str:
+    import requests
+    try:
+        r = requests.get(url, allow_redirects=True, timeout=10,
+                        headers={'User-Agent': 'Mozilla/5.0'})
+        return r.url
+    except Exception:
+        return url
+
+
+def download_tiktok_carousel(url: str, output_dir: str) -> dict:
+    import requests
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Referer': 'https://www.tiktok.com/',
+    }
+    oembed_url = f"https://www.tiktok.com/oembed?url={url}"
+    resp = requests.get(oembed_url, headers=headers, timeout=10)
+    if resp.status_code == 200:
+        data = resp.json()
+        thumbnail = data.get('thumbnail_url')
+        if thumbnail:
+            img_path = os.path.join(output_dir, 'carousel_thumb.jpg')
+            img_resp = requests.get(thumbnail, headers=headers, timeout=10)
+            with open(img_path, 'wb') as f:
+                f.write(img_resp.content)
+            return {"type": "images", "paths": [img_path]}
+    raise RuntimeError("Could not download TikTok carousel — try screenshotting the recipe instead")
+
+
 def download_reel(url: str, output_dir: str) -> dict:
+    resolved_url = resolve_url(url)
+
+    if '/photo/' in resolved_url:
+        return download_tiktok_carousel(resolved_url, output_dir)
+
     output_template = os.path.join(output_dir, "media_%(autonumber)s.%(ext)s")
     cmd = ["python", "-m", "yt_dlp", "--no-warnings", "-o", output_template]
     cookies_b64 = os.environ.get("COOKIES_B64", "")
@@ -20,7 +55,7 @@ def download_reel(url: str, output_dir: str) -> dict:
         with open(cookies_path, "wb") as f:
             f.write(base64.b64decode(cookies_b64))
         cmd += ["--cookies", cookies_path]
-    cmd.append(url)
+    cmd.append(resolved_url)
     result = subprocess.run(
         cmd,
         capture_output=True, text=True, timeout=60,
@@ -42,14 +77,9 @@ def download_reel(url: str, output_dir: str) -> dict:
         if os.path.splitext(f)[1].lower() in video_extensions
     ])
 
-    import logging
-    logging.warning(f"Downloaded files: {all_files}")
-    
     if images:
-        logging.warning(f"Detected carousel with {len(images)} images")
         return {"type": "images", "paths": images}
     elif videos:
-        logging.warning(f"Detected video: {videos[0]}")
         return {"type": "video", "path": videos[0]}
     else:
         raise RuntimeError(f"No media files downloaded. Files found: {all_files}")
