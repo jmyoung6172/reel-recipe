@@ -23,22 +23,47 @@ def resolve_url(url: str) -> str:
 
 def download_tiktok_carousel(url: str, output_dir: str) -> dict:
     import requests
+    rapidapi_key = os.environ.get("RAPIDAPI_KEY", "")
+    if not rapidapi_key:
+        raise RuntimeError("RapidAPI key not configured")
+
     headers = {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-        'Referer': 'https://www.tiktok.com/',
+        'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com',
+        'x-rapidapi-key': rapidapi_key,
+        'Content-Type': 'application/json',
     }
-    oembed_url = f"https://www.tiktok.com/oembed?url={url}"
-    resp = requests.get(oembed_url, headers=headers, timeout=10)
-    if resp.status_code == 200:
-        data = resp.json()
-        thumbnail = data.get('thumbnail_url')
-        if thumbnail:
-            img_path = os.path.join(output_dir, 'carousel_thumb.jpg')
-            img_resp = requests.get(thumbnail, headers=headers, timeout=10)
-            with open(img_path, 'wb') as f:
-                f.write(img_resp.content)
-            return {"type": "images", "paths": [img_path]}
-    raise RuntimeError("Could not download TikTok carousel — try screenshotting the recipe instead")
+    resp = requests.get(
+        'https://tiktok-scraper7.p.rapidapi.com/',
+        headers=headers,
+        params={'url': url, 'hd': '1'},
+        timeout=15
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"RapidAPI request failed: {resp.status_code}")
+
+    data = resp.json().get('data', {})
+    image_urls = data.get('images', [])
+
+    if not image_urls:
+        raise RuntimeError("No images found in carousel post")
+
+    image_paths = []
+    dl_headers = {'User-Agent': 'Mozilla/5.0'}
+    for i, img_url in enumerate(image_urls[:5]):
+        try:
+            img_resp = requests.get(img_url, headers=dl_headers, timeout=10)
+            if img_resp.status_code == 200:
+                img_path = os.path.join(output_dir, f'slide_{i}.jpg')
+                with open(img_path, 'wb') as f:
+                    f.write(img_resp.content)
+                image_paths.append(img_path)
+        except Exception:
+            continue
+
+    if not image_paths:
+        raise RuntimeError("Could not download carousel images")
+
+    return {"type": "images", "paths": image_paths}
 
 
 def download_reel(url: str, output_dir: str) -> dict:
