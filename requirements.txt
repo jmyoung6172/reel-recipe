@@ -6,3 +6,4 @@ imageio>=2.34.0
 imageio[ffmpeg]
 gevent>=24.0
 Pillow>=10.0
+requests>=2.31.0
